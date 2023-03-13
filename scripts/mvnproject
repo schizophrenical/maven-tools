@@ -1,0 +1,383 @@
+#!/usr/bin/env bash
+#
+#  Create a maven project using a custom maven archetype plugin (Base POM).
+#  You have to use the custom archetype from this git repository:
+#  https://github.com/schizophrenical/maven-tools
+#
+#  Usage: mvnproject [-a artifactId -g groupId [-v version] [[-p package] | [-b]] [[-D] | [-m]] [-d dir] [-q] [-S]]
+#                    [-c]"
+#                    [-h]"
+#
+#  MANDATORY"
+#  -a  ArtifactId of the project."
+#  -g  GroupId of the project."
+#
+#  OPTIONAL"
+#  -b  Base pom project type. Defaults to jar packaging if not provided.
+#  -d  Path to create the project in. Defaults to the current directory.
+#      Creates the directory if not found.
+#      NOTE: Full directory path required.
+#  -D  Produce execution debug output.
+#  -p  Package name. Defaults to artifactId if not provided.
+#      SPACES and DASH will be converted to (.) dot.
+#      - I.e.: 'com-my package' will be converted to com.my.package
+#      NOTE: WILL BE IGNORED when -b (base pom project type) is used.
+#  -q  Quiet mode. No asking to continue but display maven build output.
+#  -m  Mute mode. No asking to continue. Only show maven errors.
+#  -v  Project version. Defaults to 1.0-SNAPSHOT if not provided.
+#
+#  OTHER
+#  -c  Checks if the custom archetypes are installed.
+#      Only checks in the DEFAULT .m2 directory.
+#  -h  Print usage/help."
+#
+#
+#  author: snooze
+
+# Globals
+ARTIFACT_ID=""
+GROUP_ID=""
+IS_POM=false
+IS_DEBUG=false
+IS_QUIET=false
+IS_MUTE=false
+VERSION="1.0-SNAPSHOT"
+PACKAGE=""
+FINAL_PACK_NAME=""
+DIRECTORY=""
+SUMMARY=true
+# colors
+NC='\033[0m'
+RED='\033[0;31m'
+LGREEN='\033[1;32m'
+
+###############################################################
+#
+# Print usage/help.
+#
+# Globals:
+#   None
+# Arguments:
+#   None
+# Outputs:
+#   Help/usage to stdout.
+###############################################################
+function usage() {
+  # Display help message
+  echo
+  echo "Usage: mvnproject [-a artifactId -g groupId [-v version] [[-p package] | [-b]] [[-D] | [-m]] [-d dir] [-q] [-S]]"
+  echo "                  [-c]"
+  echo "                  [-h]"
+  echo
+  echo "Create a maven project based on custom archetypes. REQUIRES Maven(and MVN_HOME setup) and custom archetypes."
+  echo
+  echo "MANDATORY"
+  echo "-a  ArtifactId of the project."
+  echo "-g  GroupId of the project."
+  echo
+  echo "OPTIONAL"
+  echo "-b  Base pom project type. Defaults to jar packaging if not provided."
+  echo "-d  Path to create the project in. Defaults to the current directory."
+  echo "    Creates the directory if not found."
+  echo "    NOTE: Full directory path required."
+  echo "-D  Produce execution debug output."
+  echo "-p  Package name. Defaults to artifactId if not provided."
+  echo "    SPACES and DASH will be converted to (.) dot."
+  echo "    - I.e.: 'com-my package' will be converted to com.my.package"
+  echo "    NOTE: WILL BE IGNORED when -b (base pom project type) is used."
+  echo "-q  Quiet mode. No asking to continue but display maven build output."
+  echo "-m  Mute mode. No asking to continue. Only show maven errors."
+  echo "-v  Project version. Defaults to 1.0-SNAPSHOT if not provided."
+  echo
+  echo "OTHER"
+  echo "-c  Checks if the custom archetypes are installed."
+  echo "    Only checks in the DEFAULT .m2 directory."
+  echo "-h  Print usage/help."
+  echo
+}
+
+###############################################################
+#
+# Print message to stdout.
+#
+# Globals:
+#   IS_MUTE
+#   IS_QUIET
+# Arguments:
+#   None
+# Outputs:
+#   Message to stdout if not mute or quiet.
+###############################################################
+function print_m() {
+   if ! $IS_MUTE && ! $IS_QUIET; then
+     echo -e $1
+   fi
+}
+
+###############################################################
+#
+# Check/validate if custom archetypes are installed on
+# the default m2 directory.
+#
+# Globals:
+#   RED
+#   LGREEN
+# Arguments:
+#   None
+# Outputs:
+#   Result of the check on stdout.
+###############################################################
+function check_archetypes() {
+  local DEFAULT_LOC=$HOME/.m2/repository/my/local/archetypes
+  print_m "Finding custom archetypes in default m2 directory ..."
+  if [ ! -d $DEFAULT_LOC ]; then
+    echo -e "${RED}Custom archetypes not found in the default m2 directory!${NC}"
+    echo -e "${RED}Please install them first before using this script. Or ignore this if you have a custom m2 directory and is sure that the archetypes are installed.${NC}"
+    exit 1
+  else
+    print_m "${LGREEN}Custom archetypes found.${NC}"
+  fi
+}
+
+###############################################################
+#
+# Print help for required options.
+#
+# Globals:
+#   None
+# Arguments:
+#   None
+# Outputs:
+#   Required options to stdout.
+###############################################################
+function print_required() {
+  echo "[-a arg] and [-g arg] are required to continue."
+  exit 1
+}
+
+###############################################################
+#
+# Finalize package name to be used.
+#
+# Globals:
+#   FINAL_PACK_NAME
+#   PACKAGE
+# Arguments:
+#   None
+# Outputs:
+#   Set FINAL_PACK_NAME variable.
+###############################################################
+function resolve_package_name() {
+  # Use artifactId as default for package when package is not provided.
+  if [ -z "$PACKAGE" ]; then
+    PACKAGE=$ARTIFACT_ID
+  fi
+
+  # Replace dash with dot.
+  local PACK=${PACKAGE//-/.}
+  # Replace spaces with dot.
+  FINAL_PACK_NAME=${PACK// /.}
+}
+
+###############################################################
+#
+# Finalize directory to generate the project into.
+#
+# Globals:
+#   DIRECTORY
+# Arguments:
+#   None
+# Outputs:
+#   Move to DIRECTORY if provided.
+###############################################################
+function resolve_dir() {
+   # Directory to generate the project to.
+  if [ -n "$DIRECTORY" ]; then
+    # Create and move to the directory provided.
+    mkdir -p "$DIRECTORY"
+    cd $DIRECTORY
+  fi
+}
+
+###############################################################
+#
+# Create the maven project based on the options provided.
+#
+# Globals:
+#   ARTIFACT_ID
+#   FINAL_PACK_NAME
+#   GROUP_ID
+#   IS_DEBUG
+#   IS_MUTE
+#   IS_POM
+#   PACKAGE
+#   VERSION
+###############################################################
+function create_project() {
+  # Command options
+  local OPTS=""
+
+  # Mute mode
+  if $IS_MUTE; then
+    OPTS="-q"
+  fi
+
+  # Add debug option if needed.
+  # Debug mode supersedes mute mode.
+  if $IS_DEBUG; then
+    OPTS="-X"
+  fi
+
+  if ! $IS_POM; then
+    mvn $OPTS archetype:generate -B \
+        -DarchetypeGroupId=org.apache.maven.archetypes \
+        -DarchetypeArtifactId=maven-archetype-quickstart \
+        -DarchetypeVersion=1.4 \
+        -DgroupId="$GROUP_ID" \
+        -DartifactId="$ARTIFACT_ID" \
+        -Dversion="$VERSION" \
+        -Dpackage="$FINAL_PACK_NAME"
+  else
+    mvn $OPTS archetype:generate -B \
+        -DarchetypeGroupId=my.local.archetypes \
+        -DarchetypeArtifactId=just-pom \
+        -DgroupId="$GROUP_ID" \
+        -DartifactId="$ARTIFACT_ID" \
+        -Dversion="$VERSION"
+  fi
+
+  exit $?
+}
+
+###############################################################
+#
+# Process options set.
+#
+# Globals:
+#   ARTIFACT_ID
+#   DIRECTORY
+#   GROUP_ID
+#   IS_DEBUG
+#   IS_MUTE
+#   IS_QUIET
+#   IS_POM
+#   PACKAGE
+#   TYPE
+#   VERSION
+##############################################################
+while getopts ":a:g:v:p:d:qmDbch" OPTION; do
+  case "$OPTION" in
+    a) # artifactId
+       ARTIFACT_ID=$OPTARG;;
+    b) # use a base pom packaging
+       IS_POM=true;;
+    c) # check if custom archetype is installed.
+       check_archetypes;
+       exit;;
+    d) # directory to create the project in.
+       DIRECTORY=$OPTARG;;
+    D) # debug mode
+       IS_DEBUG=true;;
+    g) # groupId
+       GROUP_ID=$OPTARG;;
+    h) # Display help
+       usage;
+       exit 0;;
+    m) # mute
+       IS_MUTE=true;;
+    p) # package name
+       PACKAGE=$OPTARG;;
+    q) # quiet mode
+       IS_QUIET=true;;
+    v) # version
+       VERSION=$OPTARG;;
+    :) # missing arguments
+       echo "Missing argument for -$OPTARG";
+       print_required;
+       exit 1;;
+    \?) # Invalid option
+        echo "Invalid option: -$OPTARG";
+        echo "Try using: mvnproject -h for usage/help.";
+        exit 1;;
+  esac
+done
+
+# Print help/usage if no options were provided.
+if [ ${#} -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+# Validate if artifactId and groupId were provided.
+if [ -z "$ARTIFACT_ID" ] && [ -z "$GROUP_ID" ]; then
+  print_required
+fi
+
+# Show warning about mute mode with debug mode.
+if $IS_MUTE && $IS_DEBUG; then
+  echo "Debug [-D] mode and Mute [-m] mode supplied together. Defaulting to debug mode."
+fi
+
+###############################################################
+#
+# Create the maven project based on the options.
+#
+# Globals:
+#   ARTIFACT_ID
+#   FINAL_PACK_NAME
+#   GROUP_ID
+#   IS_MUTE
+#   IS_POM
+#   VERSION
+#   RED
+#   LGREEN
+##############################################################
+# Check if custom archetypes are installed.
+check_archetypes
+
+# Verify if maven is installed and configured.
+if ! type mvn >> /dev/null; then
+  echo "Can't find mvn command. Check if maven is installed and configured properly."
+  exit 1
+elif [ -z "$MVN_HOME" ]; then
+  echo "MVN_HOME environment variable not found. Configure it first."
+  exit 1
+else
+  # Only show summary if not on mute mode.
+  if ! $IS_MUTE; then
+    # Execute project creation.
+    echo "Creating a maven project with the following settings:"
+    echo -e "- ArifactId : ${LGREEN}$ARTIFACT_ID${NC}"
+    echo -e "- GroupId : ${LGREEN}$GROUP_ID${NC}"
+    echo -e "- Version : ${LGREEN}$VERSION${NC}"
+    if $IS_POM; then
+      echo -e "- Type : ${LGREEN}Base POM${NC}"
+    else
+      resolve_package_name
+      echo -e "- Package : ${LGREEN}$FINAL_PACK_NAME${NC}"
+      echo -e "- Type : ${LGREEN}JAR${NC}"
+    fi
+    if [ -z "$DIRECTORY" ]; then
+      echo -e "- Project Dir : ${LGREEN}$PWD${NC}"
+    else
+      echo -e "- Project Dir : ${LGREEN}$DIRECTORY${NC}"
+    fi
+    # Only ask for confirmation if not on quiet mode.
+    if ! $IS_QUIET; then
+      while true; do
+        read -r -p 'Do you want to continue? [y|Y|n|N] ' cont
+        case "$cont" in
+            y|Y) break;;
+            n|N) exit 0;;
+            *) echo "Options are y|Y to continue, n|N to quit";;
+        esac
+      done
+    fi
+  fi
+
+  # Resolve directory if needed.
+  resolve_dir
+  # Finally, create the maven project.
+  create_project
+
+fi
