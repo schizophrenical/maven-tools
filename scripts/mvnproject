@@ -365,8 +365,8 @@ else
     # Only ask for confirmation if not on quiet mode.
     if ! $IS_QUIET; then
       while true; do
-        read -r -p 'Do you want to continue? [y|Y|n|N] ' cont
-        case "$cont" in
+        read -r -p 'Do you want to continue? [y|Y|n|N] ' CONT
+        case "$CONT" in
             y|Y) break;;
             n|N) exit 0;;
             *) echo "Options are y|Y to continue, n|N to quit";;
