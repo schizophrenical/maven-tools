@@ -345,7 +345,7 @@ elif [ -z "$MVN_HOME" ]; then
 else
   # Only show summary if not on mute mode.
   if ! $IS_MUTE; then
-    # Execute project creation.
+    # Show summary.
     echo "Creating a maven project with the following settings:"
     echo -e "- ArifactId : ${LGREEN}$ARTIFACT_ID${NC}"
     echo -e "- GroupId : ${LGREEN}$GROUP_ID${NC}"
