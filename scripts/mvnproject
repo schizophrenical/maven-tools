@@ -45,7 +45,6 @@ VERSION="1.0-SNAPSHOT"
 PACKAGE=""
 FINAL_PACK_NAME=""
 DIRECTORY=""
-SUMMARY=true
 # colors
 NC='\033[0m'
 RED='\033[0;31m'
@@ -110,7 +109,7 @@ function usage() {
 ###############################################################
 function print_m() {
    if ! $IS_MUTE && ! $IS_QUIET; then
-     echo -e $1
+     echo -e "$1"
    fi
 }
 
@@ -130,7 +129,7 @@ function print_m() {
 function check_archetypes() {
   local DEFAULT_LOC=$HOME/.m2/repository/my/local/archetypes
   print_m "Finding custom archetypes in default m2 directory ..."
-  if [ ! -d $DEFAULT_LOC ]; then
+  if [ ! -d "$DEFAULT_LOC" ]; then
     echo -e "${RED}Custom archetypes not found in the default m2 directory!${NC}"
     echo -e "${RED}Please install them first before using this script. Or ignore this if you have a custom m2 directory and is sure that the archetypes are installed.${NC}"
     exit 1
@@ -195,7 +194,7 @@ function resolve_dir() {
   if [ -n "$DIRECTORY" ]; then
     # Create and move to the directory provided.
     mkdir -p "$DIRECTORY"
-    cd $DIRECTORY
+    cd "$DIRECTORY" || return
   fi
 }
 
@@ -293,8 +292,7 @@ while getopts ":a:g:v:p:d:qmDbch" OPTION; do
        VERSION=$OPTARG;;
     :) # missing arguments
        echo "Missing argument for -$OPTARG";
-       print_required;
-       exit 1;;
+       print_required;;
     \?) # Invalid option
         echo "Invalid option: -$OPTARG";
         echo "Try using: mvnproject -h for usage/help.";
